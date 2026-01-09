@@ -1,10 +1,27 @@
 'use client'
 
-import FormColumn from './FormColumn'
+import { useDroppable } from '@dnd-kit/core'
+import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable'
+import SortableColumn from './SortableColumn'
 
 export default function FormRow({ row, onDeleteField, onAddColumn, onDeleteColumn, onDeleteRow }) {
+  const columnIds = row.columns.map((col) => col.id)
+  
+  const { setNodeRef, isOver } = useDroppable({
+    id: `row-${row.id}`,
+    data: {
+      type: 'row',
+      rowId: row.id,
+    },
+  })
+
   return (
-    <div className="mb-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+    <div 
+      ref={setNodeRef}
+      className={`mb-4 bg-white border border-gray-200 rounded-lg shadow-sm transition-colors ${
+        isOver ? 'border-blue-500 bg-blue-50' : ''
+      }`}
+    >
       <div className="p-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
         <div className="text-sm font-semibold text-gray-600">Row {row.id.slice(-4)}</div>
         <div className="flex gap-2">
@@ -22,26 +39,20 @@ export default function FormRow({ row, onDeleteField, onAddColumn, onDeleteColum
           </button>
         </div>
       </div>
-      <div className="p-4 flex gap-4">
-        {row.columns.map((column) => (
-          <div key={column.id} className="flex-1 flex flex-col relative group">
-            <FormColumn
+      <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
+        <div className="p-4 flex gap-4">
+          {row.columns.map((column) => (
+            <SortableColumn
+              key={column.id}
               column={column}
+              rowId={row.id}
               onDeleteField={onDeleteField}
               onAddField={onAddColumn}
+              onDeleteColumn={row.columns.length > 1 ? onDeleteColumn : null}
             />
-            {row.columns.length > 1 && (
-              <button
-                onClick={() => onDeleteColumn(row.id, column.id)}
-                className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center text-red-500 hover:text-red-700 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                aria-label="Delete column"
-              >
-                ×
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </SortableContext>
     </div>
   )
 }

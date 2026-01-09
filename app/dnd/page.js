@@ -71,6 +71,20 @@ export default function DnD() {
     })
   )
 
+  // Find column by ID
+  const findColumnById = (columnId) => {
+    for (const row of formRows) {
+      const column = row.columns.find((col) => col.id === columnId)
+      if (column) {
+        return {
+          ...column,
+          rowId: row.id,
+        }
+      }
+    }
+    return null
+  }
+
   // Find field by ID across available fields and form
   const findFieldById = (fieldId) => {
     // Check available fields
@@ -158,6 +172,91 @@ export default function DnD() {
     )
   }
 
+  // Move column from one row to another
+  const moveColumnBetweenRows = (sourceRowId, targetRowId, columnId, insertAfterColumnId = null) => {
+    setFormRows((prevRows) => {
+      let columnToMove = null
+      
+      // First, find and remove the column from source row
+      const rowsWithoutColumn = prevRows.map((row) => {
+        if (row.id === sourceRowId) {
+          const columnIndex = row.columns.findIndex((col) => col.id === columnId)
+          if (columnIndex !== -1) {
+            columnToMove = row.columns[columnIndex]
+            return {
+              ...row,
+              columns: row.columns.filter((col) => col.id !== columnId),
+            }
+          }
+        }
+        return row
+      })
+
+      if (!columnToMove) return prevRows
+
+      // Ensure at least one column remains in source row
+      const updatedRows = rowsWithoutColumn.map((row) => {
+        if (row.id === sourceRowId && row.columns.length === 0) {
+          return {
+            ...row,
+            columns: [
+              {
+                id: generateId(),
+                fields: [],
+              },
+            ],
+          }
+        }
+        return row
+      })
+
+      // Add column to target row
+      return updatedRows.map((row) => {
+        if (row.id === targetRowId) {
+          if (insertAfterColumnId !== null) {
+            // Insert at specific position
+            const insertIndex = row.columns.findIndex((col) => col.id === insertAfterColumnId)
+            if (insertIndex !== -1) {
+              const newColumns = [...row.columns]
+              newColumns.splice(insertIndex + 1, 0, columnToMove)
+              return {
+                ...row,
+                columns: newColumns,
+              }
+            }
+          }
+          // Add to end
+          return {
+            ...row,
+            columns: [...row.columns, columnToMove],
+          }
+        }
+        return row
+      })
+    })
+  }
+
+  // Reorder columns within a row
+  const reorderColumnsInRow = (rowId, activeId, overId) => {
+    setFormRows((prevRows) =>
+      prevRows.map((row) => {
+        if (row.id === rowId) {
+          const oldIndex = row.columns.findIndex((col) => col.id === activeId)
+          const newIndex = row.columns.findIndex((col) => col.id === overId)
+
+          if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+            // Use arrayMove utility from @dnd-kit/sortable for proper reordering
+            return {
+              ...row,
+              columns: arrayMove(row.columns, oldIndex, newIndex),
+            }
+          }
+        }
+        return row
+      })
+    )
+  }
+
   // Reorder fields within a column
   const reorderFieldsInColumn = (rowId, columnId, activeId, overId) => {
     setFormRows((prevRows) =>
@@ -197,6 +296,45 @@ export default function DnD() {
 
     const activeId = active.id
     const overId = over.id
+
+    // Check if dragging columns
+    const activeColumn = findColumnById(activeId)
+    const overColumn = findColumnById(overId)
+
+    if (activeColumn) {
+      // Check if dropping on a row (row droppable ID format: "row-{rowId}")
+      if (overId.startsWith('row-')) {
+        const targetRowId = overId.replace('row-', '')
+        if (targetRowId !== activeColumn.rowId) {
+          // Move column to target row (at the end)
+          moveColumnBetweenRows(activeColumn.rowId, targetRowId, activeId)
+          return
+        }
+      }
+      
+      // If both are columns
+      if (overColumn) {
+        // Same row: reorder within row
+        if (activeColumn.rowId === overColumn.rowId) {
+          reorderColumnsInRow(activeColumn.rowId, activeId, overId)
+          return
+        }
+        // Different row: move column to target row at target position
+        else {
+          moveColumnBetweenRows(activeColumn.rowId, overColumn.rowId, activeId, overId)
+          return
+        }
+      }
+      // If dragging column over a field (in a different row), move column to that field's row
+      else {
+        const overField = findFieldById(overId)
+        if (overField?.source === 'form' && overField.rowId !== activeColumn.rowId) {
+          // Move column to the row containing the field, after the field's column
+          moveColumnBetweenRows(activeColumn.rowId, overField.rowId, activeId, overField.columnId)
+          return
+        }
+      }
+    }
 
     // Check if dragging to reorder within the same column (both IDs are field IDs)
     const activeField = findFieldById(activeId)
