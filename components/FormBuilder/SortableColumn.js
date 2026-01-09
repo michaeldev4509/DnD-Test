@@ -24,7 +24,7 @@ export default function SortableColumn({ column, onDeleteField, onAddField, onDe
   const style = {
     transform: CSS.Translate.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.2 : 1,
   }
 
   return (

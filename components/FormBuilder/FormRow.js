@@ -1,13 +1,15 @@
 'use client'
 
-import { useDroppable } from '@dnd-kit/core'
+import { useDroppable, useDndContext } from '@dnd-kit/core'
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable'
+import { useCallback } from 'react'
 import SortableColumn from './SortableColumn'
 
-export default function FormRow({ row, onDeleteField, onAddColumn, onDeleteColumn, onDeleteRow }) {
+export default function FormRow({ row, onDeleteField, onAddColumn, onDeleteColumn, onDeleteRow, dragHandleProps }) {
+  const { active } = useDndContext()
   const columnIds = row.columns.map((col) => col.id)
   
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `row-${row.id}`,
     data: {
       type: 'row',
@@ -15,15 +17,26 @@ export default function FormRow({ row, onDeleteField, onAddColumn, onDeleteColum
     },
   })
 
+  // Determine if we should highlight - only when dragging a column (rows are drop zones for columns)
+  // Note: Row highlighting when dragging rows is handled by the SortableRow wrapper
+  const isDraggingColumn = active && active.data.current?.type === 'column' && active.data.current?.column
+  const shouldHighlight = isOver && isDraggingColumn
+
   return (
     <div 
-      ref={setNodeRef}
-      className={`mb-4 bg-white border border-gray-200 rounded-lg shadow-sm transition-colors ${
-        isOver ? 'border-blue-500 bg-blue-50' : ''
+      ref={setDroppableRef}
+      className={`mb-4 bg-white border rounded-lg shadow-sm transition-colors ${
+        shouldHighlight ? 'border-green-500 bg-green-50' : 'border-gray-200'
       }`}
     >
       <div className="p-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
-        <div className="text-sm font-semibold text-gray-600">Row {row.id.slice(-4)}</div>
+        <div 
+          {...(dragHandleProps || {})}
+          className="text-sm font-semibold text-gray-600 cursor-grab active:cursor-grabbing flex items-center gap-2 select-none"
+        >
+          <span>☰</span>
+          <span>Row {row.id.slice(-4)}</span>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => onAddColumn(row.id)}

@@ -1,6 +1,7 @@
 'use client'
 
-import FormRow from './FormRow'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import SortableRow from './SortableRow'
 
 export default function FormBuilder({
   formRows,
@@ -9,6 +10,8 @@ export default function FormBuilder({
   onDeleteColumn,
   onDeleteRow,
 }) {
+  const rowIds = formRows.map((row) => row.id)
+
   return (
     <div className="flex-1 overflow-y-auto p-6 bg-gray-100">
       <div className="max-w-7xl mx-auto">
@@ -20,18 +23,20 @@ export default function FormBuilder({
             </p>
           </div>
         ) : (
-          <div>
-            {formRows.map((row) => (
-              <FormRow
-                key={row.id}
-                row={row}
-                onDeleteField={onDeleteField}
-                onAddColumn={onAddColumn}
-                onDeleteColumn={onDeleteColumn}
-                onDeleteRow={onDeleteRow}
-              />
-            ))}
-          </div>
+          <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+            <div>
+              {formRows.map((row) => (
+                <SortableRow
+                  key={row.id}
+                  row={row}
+                  onDeleteField={onDeleteField}
+                  onAddColumn={onAddColumn}
+                  onDeleteColumn={onDeleteColumn}
+                  onDeleteRow={onDeleteRow}
+                />
+              ))}
+            </div>
+          </SortableContext>
         )}
       </div>
     </div>

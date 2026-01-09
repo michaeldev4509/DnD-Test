@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates, arrayMove } from '@dnd-kit/sortable'
 import AvailableFieldsPanel from '@/components/FormBuilder/AvailableFieldsPanel'
 import FormBuilder from '@/components/FormBuilder/FormBuilder'
+import FormField from '@/components/FormBuilder/FormField'
 
 // Initial field names from user's list
 const INITIAL_FIELD_NAMES = [
@@ -63,9 +64,17 @@ export default function DnD() {
     },
   ])
 
+  // Track active drag item for DragOverlay
+  const [activeId, setActiveId] = useState(null)
+  const [activeItem, setActiveItem] = useState(null)
+
   // Configure sensors for drag and drop
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Require 8px movement before activating drag
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -236,6 +245,19 @@ export default function DnD() {
     })
   }
 
+  // Reorder rows
+  const reorderRows = (activeId, overId) => {
+    setFormRows((prevRows) => {
+      const oldIndex = prevRows.findIndex((row) => row.id === activeId)
+      const newIndex = prevRows.findIndex((row) => row.id === overId)
+
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+        return arrayMove(prevRows, oldIndex, newIndex)
+      }
+      return prevRows
+    })
+  }
+
   // Reorder columns within a row
   const reorderColumnsInRow = (rowId, activeId, overId) => {
     setFormRows((prevRows) =>
@@ -288,14 +310,89 @@ export default function DnD() {
     )
   }
 
+  // Find row by ID (handles both row.id and row-{rowId} formats)
+  const findRowById = (id) => {
+    // Check if it's the droppable format (row-{rowId})
+    if (typeof id === 'string' && id.startsWith('row-')) {
+      const rowId = id.replace('row-', '')
+      return formRows.find((row) => row.id === rowId) || null
+    }
+    // Otherwise, treat as direct row ID
+    return formRows.find((row) => row.id === id) || null
+  }
+
+  // Handle drag start
+  const handleDragStart = (event) => {
+    const { active } = event
+    setActiveId(active.id)
+    
+    // Find the item being dragged to render in overlay
+    const field = findFieldById(active.id)
+    const column = findColumnById(active.id)
+    const row = findRowById(active.id)
+    
+    if (field) {
+      setActiveItem({ type: 'field', item: field })
+    } else if (column) {
+      setActiveItem({ type: 'column', item: column })
+    } else if (row) {
+      setActiveItem({ type: 'row', item: row })
+    }
+  }
+
+  // Handle drag cancel/end
+  const handleDragCancel = () => {
+    setActiveId(null)
+    setActiveItem(null)
+  }
+
   // Handle drag end
   const handleDragEnd = (event) => {
     const { active, over } = event
+
+    setActiveId(null)
+    setActiveItem(null)
 
     if (!over) return
 
     const activeId = active.id
     const overId = over.id
+
+    // Check if dragging rows first (before checking columns/fields)
+    // Active should be a row ID (from SortableRow)
+    const activeRow = findRowById(activeId)
+    
+    if (activeRow) {
+      // If dragging a row, check what we're dropping on
+      // Over could be a row ID, row droppable ID (row-{rowId}), or a column/field
+      let overRow = findRowById(overId)
+      
+      // If overId is a column or field, find the row it belongs to
+      if (!overRow) {
+        const overColumn = findColumnById(overId)
+        if (overColumn) {
+          overRow = findRowById(overColumn.rowId)
+        } else {
+          const overField = findFieldById(overId)
+          if (overField?.source === 'form') {
+            overRow = findRowById(overField.rowId)
+          }
+        }
+      }
+      
+      if (overRow) {
+        // Dropping on another row - reorder
+        const activeRowId = activeRow.id
+        const overRowId = overRow.id
+        
+        if (activeRowId !== overRowId) {
+          reorderRows(activeRowId, overRowId)
+          return
+        }
+      }
+      // If can't find a valid target row, cancel the drag
+      return
+    }
 
     // Check if dragging columns
     const activeColumn = findColumnById(activeId)
@@ -521,7 +618,9 @@ export default function DnD() {
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
+        onDragCancel={handleDragCancel}
       >
         <div className="flex flex-1 overflow-hidden">
           <AvailableFieldsPanel
@@ -536,6 +635,42 @@ export default function DnD() {
             onDeleteRow={handleDeleteRow}
           />
         </div>
+        <DragOverlay>
+          {activeItem ? (
+            <>
+              {activeItem.type === 'field' && (
+                <div className="bg-white border border-gray-300 rounded p-3 shadow-2xl w-64 rotate-2">
+                  <div className="font-medium text-gray-800">{activeItem.item.name}</div>
+                  {activeItem.item.type && (
+                    <div className="text-xs text-gray-500 mt-1">{activeItem.item.type}</div>
+                  )}
+                </div>
+              )}
+              {activeItem.type === 'column' && (
+                <div className="bg-white border-2 border-gray-300 rounded-lg p-4 shadow-2xl w-64 rotate-2">
+                  <div className="text-xs font-semibold text-gray-500 uppercase mb-2 flex items-center gap-2">
+                    <span>☰</span>
+                    <span>Column</span>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    {activeItem.item.fields?.length || 0} field(s)
+                  </div>
+                </div>
+              )}
+              {activeItem.type === 'row' && (
+                <div className="bg-white border border-gray-200 rounded-lg shadow-2xl p-4 min-w-[400px] rotate-1">
+                  <div className="text-sm font-semibold text-gray-600 mb-2 flex items-center gap-2">
+                    <span>☰</span>
+                    <span>Row {activeItem.item.id.slice(-4)}</span>
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {activeItem.item.columns?.length || 0} column(s)
+                  </div>
+                </div>
+              )}
+            </>
+          ) : null}
+        </DragOverlay>
       </DndContext>
     </div>
   )

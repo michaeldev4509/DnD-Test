@@ -25,7 +25,7 @@ function SortableFormField({ field, index, onDelete }) {
   const style = {
     transform: CSS.Translate.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.2 : 1,
   }
 
   return (
@@ -78,7 +78,7 @@ function DraggableFormField({ field, index, onDelete }) {
 
   const style = {
     transform: CSS.Translate.toString(transform),
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.2 : 1,
   }
 
   return (
